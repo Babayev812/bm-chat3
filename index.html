@@ -1,0 +1,217 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>BM Chat - Ümumi və Xüsusi</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+    #messages, #privateMessages {
+      border: 1px solid #ccc;
+      height: 300px;
+      overflow-y: scroll;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    .message {
+      margin-bottom: 10px;
+    }
+    .user {
+      cursor: pointer;
+      color: blue;
+      text-decoration: underline;
+      margin-right: 8px;
+      display: inline-block;
+    }
+    #usersList {
+      margin-top: 15px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 100px;
+      overflow-y: auto;
+    }
+    input, button {
+      padding: 10px;
+      width: 100%;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    h2, h3, h4 {
+      margin-top: 20px;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>BM Chat - Ümumi</h2>
+  <div id="messages"></div>
+
+  <input type="text" id="username" placeholder="Adını yaz (məsələn: Mehemmed)" />
+  <button id="saveNameBtn">Adı Qeyd Et</button>
+
+  <h3>İstifadəçilər</h3>
+  <div id="usersList">İstifadəçilər yüklənir...</div>
+
+  <h3>Xüsusi Chat</h3>
+  <div id="privateMessages">Xüsusi mesajlar burda görünəcək.</div>
+
+  <input type="text" id="privateInput" placeholder="Xüsusi mesajını yaz" />
+  <button id="sendPrivateBtn">Xüsusi Mesaj Göndər</button>
+
+  <h4>Ümumi Mesaj Yaz</h4>
+  <input type="text" id="messageInput" placeholder="Ümumi mesaja yaz" />
+  <button id="sendPublicBtn">Ümumi Mesaj Göndər</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, push, onChildAdded, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // Firebase konfiqurasiyası
+    const firebaseConfig = {
+      apiKey: "AIzaSyBZFhAzcZ4VYRXF6WdM8xEaIW1IkXkiZAI",
+      authDomain: "bm-chat-92975.firebaseapp.com",
+      databaseURL: "https://bm-chat-92975-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "bm-chat-92975",
+      storageBucket: "bm-chat-92975.appspot.com",
+      messagingSenderId: "382828188263",
+      appId: "1:382828188263:web:bdad8f64f03f810449fac2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // HTML elementlər
+    const usernameInput = document.getElementById("username");
+    const saveNameBtn = document.getElementById("saveNameBtn");
+    const usersListDiv = document.getElementById("usersList");
+    const messagesDiv = document.getElementById("messages");
+    const privateMessagesDiv = document.getElementById("privateMessages");
+    const privateInput = document.getElementById("privateInput");
+    const sendPrivateBtn = document.getElementById("sendPrivateBtn");
+    const messageInput = document.getElementById("messageInput");
+    const sendPublicBtn = document.getElementById("sendPublicBtn");
+
+    let currentUser = "";
+    let privateChatUser = "";
+
+    // İstifadəçi adı qeyd et
+    saveNameBtn.onclick = () => {
+      const name = usernameInput.value.trim();
+      if (!name) {
+        alert("Adını yaz!");
+        return;
+      }
+      currentUser = name;
+      set(ref(db, "users/" + currentUser), true);
+      alert("Adınız qeyd edildi: " + currentUser);
+      loadUsers();
+      listenPublicMessages();
+      listenPrivateMessages();
+    };
+
+    // İstifadəçiləri yüklə və göstər
+    function loadUsers() {
+      const usersRef = ref(db, "users");
+      onValue(usersRef, (snapshot) => {
+        usersListDiv.innerHTML = "";
+        snapshot.forEach((child) => {
+          const user = child.key;
+          if (user !== currentUser) {
+            const userSpan = document.createElement("span");
+            userSpan.textContent = user;
+            userSpan.className = "user";
+            userSpan.onclick = () => {
+              privateChatUser = user;
+              privateMessagesDiv.innerHTML = `<h4>${privateChatUser} ilə xüsusi chat</h4>`;
+            };
+            usersListDiv.appendChild(userSpan);
+          }
+        });
+        if (!usersListDiv.hasChildNodes()) {
+          usersListDiv.textContent = "Başqa istifadəçi yoxdur.";
+        }
+      });
+    }
+
+    // Ümumi mesajları dinlə
+    function listenPublicMessages() {
+      const publicRef = ref(db, "publicMessages");
+      onChildAdded(publicRef, (data) => {
+        const msg = data.val();
+        const div = document.createElement("div");
+        div.className = "message";
+        div.textContent = `[${msg.time}] ${msg.name}: ${msg.text}`;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
+    }
+
+    // Xüsusi mesajları dinlə
+    function listenPrivateMessages() {
+      const privateRef = ref(db, "privateMessages");
+      onChildAdded(privateRef, (data) => {
+        const msg = data.val();
+        if (
+          (msg.from === currentUser && msg.to === privateChatUser) ||
+          (msg.from === privateChatUser && msg.to === currentUser)
+        ) {
+          const div = document.createElement("div");
+          div.className = "message";
+          div.textContent = `[${msg.time}] ${msg.from} → ${msg.to}: ${msg.text}`;
+          privateMessagesDiv.appendChild(div);
+          privateMessagesDiv.scrollTop = privateMessagesDiv.scrollHeight;
+        }
+      });
+    }
+
+    // Ümumi mesaj göndər
+    sendPublicBtn.onclick = () => {
+      const text = messageInput.value.trim();
+      if (!currentUser) {
+        alert("Əvvəl adını qeyd et!");
+        return;
+      }
+      if (!text) return;
+
+      const publicRef = ref(db, "publicMessages");
+      push(publicRef, {
+        name: currentUser,
+        text: text,
+        time: new Date().toLocaleTimeString()
+      });
+
+      messageInput.value = "";
+    };
+
+    // Xüsusi mesaj göndər
+    sendPrivateBtn.onclick = () => {
+      const text = privateInput.value.trim();
+      if (!currentUser) {
+        alert("Əvvəl adını qeyd et!");
+        return;
+      }
+      if (!privateChatUser) {
+        alert("Xüsusi mesaj göndərmək üçün istifadəçi seç!");
+        return;
+      }
+      if (!text) return;
+
+      const privateRef = ref(db, "privateMessages");
+      push(privateRef, {
+        from: currentUser,
+        to: privateChatUser,
+        text: text,
+        time: new Date().toLocaleTimeString()
+      });
+
+      privateInput.value = "";
+    };
+  </script>
+
+</body>
+</html>
